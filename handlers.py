@@ -1,4 +1,5 @@
 import textwrap, asyncio
+import sources
 from aiogram import Dispatcher
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
@@ -52,3 +53,12 @@ async def list_sources(message: Message):
         )
     )
 
+@dp.message(Command("currencies"))
+async def currencies(message: Message):
+    async with asyncio.TaskGroup() as tg:
+        sas = sources.SAS()
+        sas_response = tg.create_task(
+            sas.get_response()
+        )
+
+        await sas.parse_html(sas_response)
