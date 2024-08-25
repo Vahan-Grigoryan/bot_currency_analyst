@@ -1,5 +1,4 @@
-import textwrap, asyncio
-import sources
+import textwrap, asyncio, sources
 from aiogram import Dispatcher
 from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
@@ -60,5 +59,13 @@ async def currencies(message: Message):
         sas_response = tg.create_task(
             sas.get_response()
         )
+        zovq = sources.Zovq()
+        zovq_response = tg.create_task(
+            zovq.get_response()
+        )
 
-        await sas.parse_html(sas_response)
+        sas_currencies = await sas.parse_html(sas_response)
+        zovq_currencies = await zovq.parse_html(zovq_response)
+
+        print("\nSAS:\n", sas_currencies)
+        print("\nZovq:\n", zovq_currencies)
