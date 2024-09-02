@@ -3,22 +3,18 @@ from . import abstractions
 import asyncio
 
 
-class Zovq(abstractions.Source):
-    url = "https://norzovq.am"
-    available_currencies = (
-        "USD", "EUR", "RUR",
-        "GBP", "GEL", "CHF",
-        "AED", "CAD", "AUD"
-    )
+class UniBank(abstractions.Source):
+    url = "https://www.unibank.am/hy/"
+    available_currencies = ("USD", "GBP", "RUB", "EUR")
 
     async def parse_html(self, task: asyncio.Task):
         """Receive task, await it, receive html of page, parse it and return currencies"""
         response = await task
         currencies_rate = {}
         parsed_html = BeautifulSoup(await response.aread(), "html.parser")
-        currency_rows = parsed_html.find_all(class_="exchange-table__cell-content")
+        currency_rows = parsed_html.find(class_="pane__body").find_all("li")
 
-        for i in range(3, len(currency_rows) // 2, 3):
+        for i in range(1, len(currency_rows), 3):
             # iterate over each currency and it prices,
             # add currency to currencies_rate
             name, buy_price, sell_price = currency_rows[i:i+3]
@@ -27,3 +23,4 @@ class Zovq(abstractions.Source):
                 "sell_price": float(sell_price.string),
             }
         return currencies_rate
+
