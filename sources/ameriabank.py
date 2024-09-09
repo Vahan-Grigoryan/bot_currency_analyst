@@ -1,6 +1,5 @@
 from bs4 import BeautifulSoup
 from . import abstractions
-import asyncio
 
 
 class AmeriaBank(abstractions.Source):
@@ -10,9 +9,11 @@ class AmeriaBank(abstractions.Source):
         "GBP", "CHF", "AUD", "CAD"
     )
 
-    async def parse_html(self, task: asyncio.Task):
-        """Receive task, await it, receive html of page, parse it and return currencies"""
+    async def parse_html(self, task, currency_name = None):
         response = await task
+        if response is None:
+            return
+
         currencies_rate = {}
         parsed_html = BeautifulSoup(await response.aread(), "html.parser")
         currency_rows = parsed_html.find(class_="exchange_wrapper").find_all(class_="Item")
@@ -22,10 +23,13 @@ class AmeriaBank(abstractions.Source):
             # add currency into currencies_rate
             name, buy_price, sell_price, *_ = currency_row.stripped_strings
             try:
-                currencies_rate[name] = {
-                    "buy_price": float(buy_price),
-                    "sell_price": float(sell_price),
-                }
+                if currency_name and not currency_name == name:
+                    continue
+                else:
+                    currencies_rate[name] = {
+                        "buy_price": float(buy_price),
+                        "sell_price": float(sell_price),
+                    }
             except ValueError:
                 pass
 
