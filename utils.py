@@ -21,72 +21,79 @@ def create_task_of_source(
 
     return source_instance, source_task
 
-async def get_currencies_list_with_chrome():
-    """
-    Run chrome instance and receive html of pages with js support,
-    pass htmls to sources and receive currencies and return them.
-    """
+
+async def get_currencies_list(for_currency: str | None = None) -> \
+    list[dict[str, dict[str, dict[str, int] | None]]]:
+    """Get all currencies or pointed currency from each source"""
+    currencies = []
+
+    sources_list = (
+        sources.SAS,
+        sources.Zovq,
+        sources.UniBank,
+        sources.AmeriaBank,
+        sources.HSBCBank,
+        sources.IDBank,
+        sources.VTBBank,
+        sources.ACBABank,
+        sources.ArtsaxBank,
+        sources.ByblosBank,
+        sources.EvocaBank,
+        sources.ArdshinBank,
+        sources.AraratBank,
+        sources.FastBank,
+        sources.ConverseBank,
+        sources.InecoBank,
+    )
+    # source instances and tasks will be stored there
+    sources_data = []
+
     launcher = Launcher({
-        "executablePath": rf"{os.getenv('CHROME_PATH')}",
+        "executablePath": os.getenv("CHROME_PATH"),
     })
     browser = await launcher.launch()
-    currencies = []
 
     async with asyncio.TaskGroup() as tg:
-        ardshinbank, ardshinbank_task = create_task_of_source(sources.ArdshinBank, tg, browser)
-        araratbank, araratbank_task = create_task_of_source(sources.AraratBank, tg, browser)
-        fastbank, fastbank_task = create_task_of_source(sources.FastBank, tg, browser)
-        conversebank, conversebank_task = create_task_of_source(sources.ConverseBank, tg, browser)
-        inecobank, inecobank_task = create_task_of_source(sources.InecoBank, tg, browser)
+        for source in sources_list:
+            if not source.need_js_support:
+                sources_data.append(
+                    create_task_of_source(source, tg)
+                )
+                continue
 
-        currencies.append({inecobank: await inecobank.parse_html(inecobank_task)})
-        currencies.append({ardshinbank: await ardshinbank.parse_html(ardshinbank_task)})
-        currencies.append({araratbank: await araratbank.parse_html(araratbank_task)})
-        currencies.append({fastbank: await fastbank.parse_html(fastbank_task)})
-        currencies.append({conversebank: await conversebank.parse_html(conversebank_task)})
+            sources_data.append(
+                create_task_of_source(source, tg, browser)
+            )
 
+        for source_instance, source_task in sources_data:
+            if for_currency and for_currency not in source_instance.available_currencies:
+                continue
+
+            source_name = source_instance.__class__.__name__
+            source_currencies = await source_instance.parse_html(source_task, for_currency)
+
+            # change RUR to RUB for valid filtering
+            if source_currencies and "RUR" in source_currencies:
+                source_currencies["RUB"] = source_currencies.pop("RUR")
+
+            currencies.append({
+                source_name: source_currencies
+            })
+            
     await browser.close()
     await launcher.killChrome()
-    return currencies
 
-async def get_currencies_list():
-    """Get all currencies from all sources"""
-    currencies = []
-
-    async with asyncio.TaskGroup() as tg:
-        sas, sas_task = create_task_of_source(sources.SAS, tg)
-        zovq, zovq_task = create_task_of_source(sources.Zovq, tg)
-        unibank, unibank_task = create_task_of_source(sources.UniBank, tg)
-        ameriabank, ameriabank_task = create_task_of_source(sources.AmeriaBank, tg)
-        hsbcbank, hsbcbank_task = create_task_of_source(sources.HSBCBank, tg)
-        idbank, idbank_task = create_task_of_source(sources.IDBank, tg)
-        vtbbank, vtbbank_task = create_task_of_source(sources.VTBBank, tg)
-        acbabank, acbabank_task = create_task_of_source(sources.ACBABank, tg)
-        #artsaxbank, artsaxbank_task = create_task_of_source(sources.ArtsaxBank, tg)
-        byblosbank, byblosbank_task = create_task_of_source(sources.ByblosBank, tg)
-        evocabank, evocabank_task = create_task_of_source(sources.EvocaBank, tg)
-
-        currencies.append({sas: await sas.parse_html(sas_task)})
-        currencies.append({zovq: await zovq.parse_html(zovq_task)})
-        currencies.append({unibank: await unibank.parse_html(unibank_task)})
-        currencies.append({ameriabank: await ameriabank.parse_html(ameriabank_task)})
-        currencies.append({hsbcbank: await hsbcbank.parse_html(hsbcbank_task)})
-        currencies.append({idbank: await idbank.parse_html(idbank_task)})
-        currencies.append({vtbbank: await vtbbank.parse_html(vtbbank_task)})
-        currencies.append({acbabank: await acbabank.parse_html(acbabank_task)})
-        #currencies.append({artsaxbank: await artsaxbank.parse_html(artsaxbank_task)})
-        currencies.append({byblosbank: await byblosbank.parse_html(byblosbank_task)})
-        currencies.append({evocabank: await evocabank.parse_html(evocabank_task)})
-    
-
-    currencies.extend(await get_currencies_list_with_chrome())
     return currencies
 
 
-def render_template_for(source_currencies):
+def render_template_for(source_currencies) -> str:
     """Create and return html for source currencies"""
     source_instance, source_currencies = tuple(source_currencies.items())[0]
-    html = f"{source_instance.__class__.__name__}:\n<pre>{'':<3}|{'buy':<6}|{'sell':<6}\n"
+
+    if not source_currencies:
+        return f"{source_instance}\nsource temporary unavailable...\n\n"
+
+    html = f"{source_instance}:\n<pre>{'':<3}| {'buy':<6} | {'sell':<6}\n"
     
     for currency_name, currency_prices in source_currencies.items():
         html += f"{currency_name}| {currency_prices['buy_price']:<6} | {currency_prices['sell_price']:<6}\n"
@@ -95,3 +102,45 @@ def render_template_for(source_currencies):
     return html
 
 
+def get_best_choices(all_sources_currencies, currency_name) -> str:
+    """
+    Evaluate the best ones for pointed currency for "buy" and "sell".
+    """
+    answer_html = ""
+    first_source = tuple(all_sources_currencies[0].items())[0]
+
+    best_buy_choice = (
+        [first_source[0]],
+        first_source[1][currency_name]["buy_price"]
+    )
+    best_sell_choice = (
+        [first_source[0]],
+        first_source[1][currency_name]["sell_price"]
+    )
+
+    for source_currencies in all_sources_currencies[1:]:
+        answer_html += render_template_for(source_currencies)
+        
+        name, currencies = tuple(source_currencies.items())[0]
+
+        if not currencies:
+            continue
+
+        if currencies[currency_name]["buy_price"] > best_buy_choice[1]:
+            best_buy_choice = ([name], currencies[currency_name]["buy_price"])
+        elif currencies[currency_name]["buy_price"] == best_buy_choice[1]:
+            best_buy_choice[0].append(name)
+
+        if currencies[currency_name]["sell_price"] < best_sell_choice[1]:
+            best_sell_choice = ([name], currencies[currency_name]["sell_price"])
+        elif currencies[currency_name]["sell_price"] == best_sell_choice[1]:
+            best_sell_choice[0].append(name)
+
+
+    answer_html += \
+    f"""
+    The best buy choice: {best_buy_choice[1]}(in {", ".join(best_buy_choice[0])})
+    The best sell choice: {best_sell_choice[1]}(in {", ".join(best_sell_choice[0])})
+    """
+    
+    return answer_html

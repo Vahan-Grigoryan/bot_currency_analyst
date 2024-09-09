@@ -1,12 +1,12 @@
 import textwrap, utils
 from aiogram import Dispatcher
-from aiogram.filters import Command, CommandStart
+from aiogram.filters import Command
 from aiogram.types import Message
 
 
 dp = Dispatcher()
 
-@dp.message(CommandStart())
+@dp.message(Command("start"))
 async def command_start_handler(message: Message):
     await message.answer(
         textwrap.dedent(
@@ -18,7 +18,8 @@ async def command_start_handler(message: Message):
 
         /sources list sources from which data collected
         /currencies list all currencies values in each source(may take a while, please wait)
-        /show_currency show the best choice of pointed currency(may take a while, please wait) 
+        /show_currency "currency_name" show the best choice of pointed currency(may take a while, please wait)
+            for example "/show_currency USD"
         """
         )
     )
@@ -53,7 +54,8 @@ async def list_sources(message: Message):
 
 @dp.message(Command("currencies"))
 async def currencies(message: Message):
-    """Receive and show all currencies"""
+    """Receive and show all currencies from each source"""
+
     answer_html = ""
     
     all_sources_currencies = await utils.get_currencies_list()
@@ -61,5 +63,22 @@ async def currencies(message: Message):
     for source_currencies in all_sources_currencies:
         answer_html += utils.render_template_for(source_currencies)
 
+
+    await message.answer(textwrap.dedent(answer_html))
+
+@dp.message(Command("show_currency"))
+async def show_currency(message: Message):
+    """Show pointed currency from each source, and the best one"""
+
+    try:
+        _, currency_name = message.text.split()
+    except ValueError:
+        await message.answer(
+            "Provide currency name, example:\n/show_currency USD"
+        )
+        return
+
+    all_sources_currencies = await utils.get_currencies_list(currency_name)
+    answer_html = utils.get_best_choices(all_sources_currencies, currency_name)
 
     await message.answer(textwrap.dedent(answer_html))
