@@ -2,8 +2,7 @@
 
 ## How to use
 > [!NOTE]
-> You should create bot and set it token in .env
-> Also you can change chrome path there as you need
+> You should create bot and set it token in .env, also you can change chrome path there as you need.
 
 Execute commands in root dir of cloned repo:
 
